@@ -500,27 +500,26 @@ async function loadFredData() {
 }
 
 async function fetchYahooParsed(ticker) {
-  const now  = Math.floor(Date.now()/1000);
+  const now = Math.floor(Date.now()/1000);
   const from = now - 60*24*3600*2;
   const yfPath = `v8/finance/chart/${encodeURIComponent(ticker)}?interval=1mo&period1=${from}&period2=${now}`;
   const yfBase = `https://query1.finance.yahoo.com/${yfPath}`;
-  const proxies = [
-    { url:`https://api.allorigins.win/get?url=${encodeURIComponent(yfBase)}`,        unwrap: r=>JSON.parse(r.contents) },
-    { url:`https://corsproxy.io/?${encodeURIComponent(yfBase)}`,                     unwrap: r=>r },
-    { url:`https://thingproxy.freeboard.io/fetch/${yfBase}`,                         unwrap: r=>r },
-  ];
-  for (const proxy of proxies) {
-    try {
-      const res = await fetch(proxy.url, { signal:AbortSignal.timeout(8000) });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const raw  = await res.json();
-      const json = proxy.unwrap(raw);
-      const closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v=>v!=null);
-      if (!closes || closes.length===0) throw new Error('empty');
-      return closes;
-    } catch(e) { console.warn(`Proxy failed ${ticker}:`, e.message); }
+  
+  // Only use the most reliable proxy and increase wait time to 15s
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(yfBase)}`;
+  
+  try {
+    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.json();
+    const json = JSON.parse(raw.contents);
+    const closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v=>v!=null);
+    if (!closes || closes.length===0) throw new Error('empty');
+    return closes;
+  } catch(e) {
+    console.warn(`Proxy failed ${ticker}:`, e.message);
+    return null;
   }
-  return null;
 }
 
 async function loadYahooData() {

@@ -476,27 +476,26 @@ async function loadAllData() {
 async function loadFredData() {
   if (!fredKey) return false;
   try {
-    // 1. Fetch CPI through the proxy
-    const cpiUrl = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=CPIAUCSL&limit=60&sort_order=desc&api_key=${fredKey}`;
-    const cpiRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(cpiUrl)}`);
-    if (!cpiRes.ok) throw new Error('CPI failed');
-    const cpiJson = await cpiRes.json();
-    // Use .contents to get the actual CSV text
-    const cpiRows = cpiJson.contents.trim().split('\n').slice(1).map(r=>parseFloat(r.split(',')[1])).filter(v=>!isNaN(v));
-    liveData.cpi = { value:cpiRows[0], history:cpiRows.slice(0,60).reverse() };
+    // Helper to fetch and parse proxy data
+    const fetchProxy = async (id) => {
+      const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&limit=60&sort_order=desc&api_key=${fredKey}`;
+      const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+      if (!res.ok) throw new Error(`${id} failed`);
+      const json = await res.json();
+      // Ensure we extract the 'contents' string from the proxy response
+      return json.contents.trim().split('\n').slice(1).map(r => parseFloat(r.split(',')[1])).filter(v => !isNaN(v));
+    };
 
-    // 2. Fetch GDP through the proxy
-    const gdpUrl = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=A191RL1A225NBEA&limit=10&sort_order=desc&api_key=${fredKey}`;
-    const gdpRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(gdpUrl)}`);
-    if (!gdpRes.ok) throw new Error('GDP failed');
-    const gdpJson = await gdpRes.json();
-    // Use .contents to get the actual CSV text
-    const gdpRows = gdpJson.contents.trim().split('\n').slice(1).map(r=>parseFloat(r.split(',')[1])).filter(v=>!isNaN(v));
-    liveData.gdp = { value:gdpRows[0], history:gdpRows.slice(0,5).reverse() };
+    const cpiRows = await fetchProxy('CPIAUCSL');
+    liveData.cpi = { value: cpiRows[0], history: cpiRows.slice(0, 60).reverse() };
+
+    const gdpRows = await fetchProxy('A191RL1A225NBEA');
+    liveData.gdp = { value: gdpRows[0], history: gdpRows.slice(0, 5).reverse() };
     
     return true;
   } catch(e) {
     console.error("FRED Load Error:", e);
+    // Use Fallback values only if the network actually fails
     liveData.cpi = FALLBACK.cpi; 
     liveData.gdp = FALLBACK.gdp; 
     return false;

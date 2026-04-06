@@ -476,50 +476,38 @@ async function loadAllData() {
 async function loadFredData() {
   if (!fredKey) return false;
   try {
-    // Helper to fetch and parse proxy data
-    const fetchProxy = async (id) => {
+    const fetchFred = async (id) => {
       const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&limit=60&sort_order=desc&api_key=${fredKey}`;
       const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
-      if (!res.ok) throw new Error(`${id} failed`);
       const json = await res.json();
-      // Ensure we extract the 'contents' string from the proxy response
+      // This is the critical line to extract the data from the proxy
       return json.contents.trim().split('\n').slice(1).map(r => parseFloat(r.split(',')[1])).filter(v => !isNaN(v));
     };
 
-    const cpiRows = await fetchProxy('CPIAUCSL');
+    const cpiRows = await fetchFred('CPIAUCSL');
     liveData.cpi = { value: cpiRows[0], history: cpiRows.slice(0, 60).reverse() };
 
-    const gdpRows = await fetchProxy('A191RL1A225NBEA');
+    const gdpRows = await fetchFred('A191RL1A225NBEA');
     liveData.gdp = { value: gdpRows[0], history: gdpRows.slice(0, 5).reverse() };
     
     return true;
   } catch(e) {
-    console.error("FRED Load Error:", e);
-    // Use Fallback values only if the network actually fails
-    liveData.cpi = FALLBACK.cpi; 
-    liveData.gdp = FALLBACK.gdp; 
-    return false;
+    liveData.cpi = FALLBACK.cpi; liveData.gdp = FALLBACK.gdp; return false;
   }
 }
 async function fetchYahooParsed(ticker) {
   const now = Math.floor(Date.now()/1000);
   const from = now - 60*24*3600*2;
-  const yfPath = `v8/finance/chart/${encodeURIComponent(ticker)}?interval=1mo&period1=${from}&period2=${now}`;
-  const yfBase = `https://query1.finance.yahoo.com/${yfPath}`;
-  
-  // Only use the most reliable proxy and increase wait time to 15s
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(yfBase)}`;
+  const yfBase = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1mo&period1=${from}&period2=${now}`;
   
   try {
-    const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const raw = await res.json();
-    const json = JSON.parse(raw.contents);
-    const closes = json?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v=>v!=null);
-    if (!closes || closes.length===0) throw new Error('empty');
-    return closes;
+    // Increased timeout to 20 seconds to ensure it loads on school WiFi
+    const res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(yfBase)}`, { signal: AbortSignal.timeout(20000) });
+    const json = await res.json();
+    const data = JSON.parse(json.contents);
+    const closes = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.close?.filter(v => v != null);
+    return closes || null;
   } catch(e) {
-    console.warn(`Proxy failed ${ticker}:`, e.message);
     return null;
   }
 }
